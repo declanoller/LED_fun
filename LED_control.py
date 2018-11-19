@@ -107,7 +107,7 @@ class LED_control:
         print('starting number scroll')
         alphabet = 'abcdefghijklmnopqrstuvwxyz'
         for i in range(len(alphabet)):
-            print('\nnumber',i)
+            print('\nletter: ', alphabet[i])
             #print('reset grid:')
             self.grid.resetGrid()
             #print('get number pixels:')
