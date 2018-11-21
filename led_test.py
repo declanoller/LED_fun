@@ -1,16 +1,20 @@
-from LED_grid import LED_grid
 from LED_control import LED_control
 
+control = LED_control(Nx=10, Ny=15, zigzag=True, run_type='simulation')
+#control.scrollLetters()
+#control.scrollNumbers()
+
+control.horizontalScroll('meow')
+
+exit(0)
+
 try:
-    control = LED_control(Nx=8, Ny=7, zigzag=True)
+    control = LED_control(Nx=8, Ny=7, zigzag=True, run_type='simulation')
     #control.scrollNumbers()
     control.scrollLetters()
 except:
     print('something failed, exiting.')
     control.clearAll()
-#sim = LED_grid(Nx=15, Ny=20)
-#sim.count()
-
 
 
 
