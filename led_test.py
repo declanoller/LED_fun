@@ -1,6 +1,6 @@
 from LED_control import LED_control
 
-control = LED_control(Nx=10, Ny=15, zigzag=True, run_type='simulation')
+control = LED_control(Nx=10, Ny=15, zigzag=True, run_type='real')
 #control.scrollLetters()
 #control.scrollNumbers()
 
