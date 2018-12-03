@@ -4,7 +4,7 @@ import argparse
 from copy import copy
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-from pylab import get_cmap
+#from pylab import get_cmap
 from colorsys import hsv_to_rgb
 from datetime import datetime
 
@@ -306,7 +306,7 @@ class LED_control:
 		margin = block_width/2.5
 
 		#cm = get_cmap('Paired')
-		cm = get_cmap('inferno')
+		#cm = get_cmap('inferno')
 
 		box_margin = 0.008
 		self.axes.clear()
@@ -344,7 +344,7 @@ class LED_control:
 		margin = block_width/2.5
 
 		#cm = get_cmap('Paired')
-		cm = get_cmap('inferno')
+		#cm = get_cmap('inferno')
 
 		box_margin = 0.008
 		self.axes.clear()
