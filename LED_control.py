@@ -5,6 +5,8 @@ from copy import copy
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 from pylab import get_cmap
+from colorsys import hsv_to_rgb
+from datetime import datetime
 
 class LED_control:
 
@@ -35,8 +37,14 @@ class LED_control:
 		self.Ny = Ny
 		self.LED_count = self.Nx*self.Ny
 
-		self.grid = np.zeros((self.Nx, self.Ny))
+		# Here, the grid entries will be 3-tuples, representing RGB vals.
+		# In python, lower vals are darker, higher are lighter.
+		self.grid = np.zeros((self.Nx, self.Ny ,3))
 
+		self.pixel_off = np.zeros(3)
+
+		print('grid shape:', self.grid.shape)
+		print('grid[0,0]: ', self.grid[0,0])
 		self.run_type = kwargs.get('run_type', 'simulation')
 
 		self.delay = 0.05
@@ -45,11 +53,11 @@ class LED_control:
 			self.createFig()
 
 		if self.run_type == 'real':
+			import neopixel
 			self.zigzag = kwargs.get('zigzag', False)
-			#from neopixel import *
 			# Create NeoPixel object with appropriate configuration.
 			print('creating neopixel object...')
-			self.strip = Adafruit_NeoPixel(self.LED_count, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
+			self.strip = neopixel.Adafruit_NeoPixel(self.LED_count, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
 			# Intialize the library (must be called once before other functions).
 			self.color_dict = {0: self.redColor(), 1: self.blueColor(), 2: self.greenColor()}
 			print('initializing neopixel object...')
@@ -68,25 +76,26 @@ class LED_control:
 	############## Basic color functions
 
 	def redColor(self):
-		return(Color(255, 0, 0))
+		return(neopixel.Color(255, 0, 0))
 
 
 	def blueColor(self):
-		return(Color(0, 255, 0))
+		return(neopixel.Color(0, 255, 0))
 
 
 	def greenColor(self):
-		return(Color(0, 0, 255))
+		return(neopixel.Color(0, 0, 255))
 
 
 	def whiteColor(self):
-		return(Color(127, 127, 127))
+		return(neopixel.Color(127, 127, 127))
 
 
 	################# Higher level drawing stuff that's used for both simulation and real stuff.
 
-	def horizontalScroll(self, in_str):
+	def horizontalScroll(self, in_str, color_cycle=False):
 
+		# Combine the smaller grids into one huge grid that the real will "scroll" through
 		grid_list = self.stringToGridList(in_str)
 		big_grid = np.concatenate(grid_list)
 		big_grid_width = big_grid.shape[0]
@@ -94,7 +103,7 @@ class LED_control:
 
 		# Do a thing where you have a "pointer" to the big_grid, and mod it by its length.
 
-		scroll_origin = [0,5]
+		scroll_origin = [0,0]
 
 		bg_pos = 0
 		while True:
@@ -104,12 +113,12 @@ class LED_control:
 				for y in range(big_grid_height):
 
 					bg_x_ind = (x + bg_pos) % big_grid_width
-					if big_grid[bg_x_ind, y]:
-						self.grid[x, scroll_origin[1] + y] = 1
+
+					self.grid[x, scroll_origin[1] + y] = big_grid[bg_x_ind, y]
 
 			# Draw the grid
 			self.drawGrid()
-			time.sleep(.01)
+			time.sleep(.1)
 			# Clear the display (not the grid!)
 			#self.clearAll()
 			bg_pos += 1
@@ -122,13 +131,13 @@ class LED_control:
 		# all into one mega-grid that's probably bigger than the display (but that part
 		# will be handled by another function.)
 
-		in_str += '  '
+		in_str += '   '
 
-		blank_grid = np.zeros((3,5))
+		blank_grid = np.zeros((3, 5, 3))
 		space_width = 2
-		space_grid = np.zeros((space_width, 5))
+		space_grid = np.zeros((space_width, 5, 3))
 		between_letter_space_width = 1
-		between_letter_grid = np.zeros((between_letter_space_width, 5))
+		between_letter_grid = np.zeros((between_letter_space_width, 5, 3))
 
 		grids = []
 
@@ -140,12 +149,48 @@ class LED_control:
 				px_list = self.getLetterPixels(char)
 				char_grid = copy(blank_grid)
 				for px in px_list:
-					char_grid[px] = 1
+					char_grid[px] = np.array([1, 1, 1])
 
 				grids.append(char_grid)
 				grids.append(between_letter_grid)
 
 		return(grids)
+
+
+	def dispTime(self):
+
+		try:
+			print('starting time disp')
+			while True:
+
+				self.resetGrid()
+
+				cur_time = self.getTime(seconds=True)
+
+				grid_list = self.stringToGridList(cur_time)
+				big_grid = np.concatenate(grid_list)
+				big_grid_width = big_grid.shape[0]
+				big_grid_height = big_grid.shape[1]
+
+				for x in range(scroll_origin[0], self.Nx):
+					for y in range(big_grid_height):
+
+						bg_x_ind = (x + bg_pos) % big_grid_width
+
+						self.grid[x, scroll_origin[1] + y] = big_grid[bg_x_ind, y]
+
+				# Sets these coords to 1 in self.grid
+				self.setGridPixels(pixel_coords)
+
+				# Draw the grid
+				self.drawGrid(i%3)
+				time.sleep(1.0)
+				# Clear the display (not the grid!)
+				self.clearAll()
+
+
+		except:
+			print('done!')
 
 
 
@@ -200,12 +245,13 @@ class LED_control:
 		if self.run_type == 'simulation':
 			self.plotPixelGrid()
 		if self.run_type == 'real':
-			self.displayPixelGrid(pixel_list, color)
+			self.displayPixelGrid()
 
 
 	def clearAll(self):
 		# This clears the simulation plot or real display. Note that it DOESN'T
-		# clear self.grid.
+		# clear self.grid. Note also that it IS technically drawing, so if you want it
+		# to be smoother, you might want to just redraw the next screen.
 		if self.run_type == 'simulation':
 			self.clearPixelGrid()
 		if self.run_type == 'real':
@@ -215,7 +261,7 @@ class LED_control:
 	############## Basic real pixel drawing functions
 
 	def clearPixelDisplay(self):
-		self.colorWipe(Color(0,0,0), 10)
+		self.colorWipe(neopixel.Color(0,0,0), 10)
 
 
 	def displayPixelGrid(self):
@@ -266,7 +312,7 @@ class LED_control:
 		self.axes.clear()
 		#self.axes.add_patch(patches.Rectangle((-box_margin*width,-box_margin*width),(1+2*box_margin)*width,(1+2*box_margin)*height,linewidth=4,edgecolor='black',facecolor='white'))
 
-		self.axes.add_patch(patches.Rectangle((0,0),width,height,linewidth=4,edgecolor='black',facecolor='white'))
+		self.axes.add_patch(patches.Rectangle((0,0), width, height, linewidth=4, edgecolor='black', facecolor='black'))
 
 		self.axes.set_xlim(-box_margin*width,(1+box_margin)*width)
 		self.axes.set_ylim(-box_margin*height,(1+box_margin)*height)
@@ -279,7 +325,7 @@ class LED_control:
 				(x0,y0) = (i*block_width+margin,j*block_width+margin)
 				rect_width = block_width - 2*margin
 
-				rect = patches.Rectangle((x0,y0), rect_width, rect_width,  facecolor='white')
+				rect = patches.Rectangle((x0,y0), rect_width, rect_width, facecolor='black')
 				self.axes.add_patch(rect)
 
 
@@ -304,7 +350,7 @@ class LED_control:
 		self.axes.clear()
 		#self.axes.add_patch(patches.Rectangle((-box_margin*width,-box_margin*width),(1+2*box_margin)*width,(1+2*box_margin)*height,linewidth=4,edgecolor='black',facecolor='white'))
 
-		self.axes.add_patch(patches.Rectangle((0,0),width,height,linewidth=4,edgecolor='black',facecolor='white'))
+		self.axes.add_patch(patches.Rectangle((0,0),width,height,linewidth=4, edgecolor='black', facecolor='black'))
 
 		self.axes.set_xlim(-box_margin*width,(1+box_margin)*width)
 		self.axes.set_ylim(-box_margin*height,(1+box_margin)*height)
@@ -317,13 +363,9 @@ class LED_control:
 				(x0,y0) = (i*block_width+margin,j*block_width+margin)
 				rect_width = block_width - 2*margin
 
-				if self.grid[i,j]==1:
-					color = 'black'
-				else:
-					color = 'white'
-				#color = cm(1.*self.grid[i,j].type/self.N_types)
+				color = self.grid[i, j]
 				#rect = patches.Rectangle((x0,y0),rect_width,rect_width,linewidth=2,edgecolor=color,facecolor=color)
-				rect = patches.Rectangle((x0,y0), rect_width, rect_width,  facecolor=color)
+				rect = patches.Rectangle((x0,y0), rect_width, rect_width, facecolor=color)
 				self.axes.add_patch(rect)
 
 
@@ -335,12 +377,13 @@ class LED_control:
 	#################### Grid/list stuff.
 
 	def resetGrid(self):
-		self.grid = np.zeros((self.Nx, self.Ny))
+		self.grid = np.zeros((self.Nx, self.Ny, 3))
 
 
 	def setGridPixels(self, pixel_indices_list):
+		# You pass this a list of coordinates to set, and it sets those ones to on.
 		for pixel in pixel_indices_list:
-			self.grid[pixel] = 1
+			self.grid[pixel] = np.array([1, 1, 1])
 
 
 	def gridToList(self, mat):
@@ -349,7 +392,6 @@ class LED_control:
 		mat_copy = copy(mat).transpose()
 
 		if self.zigzag:
-			print('adjusting for zigzag')
 			for i in range(mat_copy.shape[0]):
 				if i%2==1:
 					mat_copy[i] = mat_copy[i,::-1]
@@ -387,6 +429,16 @@ class LED_control:
 
 
 
+
+	def getTime(self, seconds=False):
+		if seconds:
+			return(datetime.now().strftime('%H:%M:%S'))
+		else:
+			return(datetime.now().strftime('%H:%M'))
+
+
+
+
 # LED strip configuration:
 LED_COUNT      = 16      # Number of LED pixels.
 LED_PIN        = 18      # GPIO pin connected to the pixels (18 uses PWM!).
@@ -418,10 +470,10 @@ dig_dict = {0: dig0, 1: dig1, 2: dig2, 3: dig3, 4: dig4, 5: dig5, 6: dig6, 7: di
 
 
 #a, b, ...
-letter0 = [[2,0], [2,3], [2,4], [1,0], [1,2], [1,4], [0,0], [0,1], [0,4]]
-letter1 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,0], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
-letter2 = [[2,0], [2,4], [1,0], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
-letter3 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,0], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
+letter0 = [[0,0], [0,1], [0,2], [0,3], [1,2], [1,4], [2,0], [2,1], [2,2], [2,3]]
+letter1 = [[2,1], [2,3], [1,0], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
+letter2 = [[2,0], [2,4], [1,0], [1,4], [0,1], [0,2], [0,3]]
+letter3 = [[2,1], [2,2], [2,3], [1,0], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter4 = [[2,0], [2,4], [1,0], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter5 = [[2,4], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter6 = [[2,0], [2,1], [2,2], [2,4], [1,1], [1,4], [0,1], [0,2], [0,3], [0,4]]
@@ -431,12 +483,12 @@ letter9 = [[2,4], [1,0], [1,1], [1,2], [1,3], [1,4], [0,0], [0,4]]
 letter10 = [[2,0], [2,1], [2,3], [2,4], [1,2], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter11 = [[2,0], [1,0], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter12 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,3], [0,0], [0,1], [0,2], [0,3], [0,4]]
-letter13 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
-letter14 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,0], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
+letter13 = [[2,0], [2,1], [2,2], [2,3], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
+letter14 = [[2,1], [2,2], [2,3], [1,0], [1,4], [0,1], [0,2], [0,3]]
 letter15 = [[2,2], [2,3], [2,4], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter16 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,1], [1,4], [0,1], [0,2], [0,3], [0,4]]
-letter17 = [[2,0], [2,2], [2,3], [2,4], [1,1], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
-letter18 = [[2,0], [2,1], [2,2], [2,4], [1,0], [1,2], [1,4], [0,0], [0,2], [0,3], [0,4]]
+letter17 = [[2,0], [2,2], [2,3], [1,1], [1,2], [1,4], [0,0], [0,1], [0,2], [0,3], [0,4]]
+letter18 = [[2,1], [2,2], [2,4], [1,0], [1,2], [1,4], [0,0], [0,2], [0,3]]
 letter19 = [[2,4], [1,0], [1,1], [1,2], [1,3], [1,4], [0,4]]
 letter20 = [[2,0], [2,1], [2,2], [2,3], [2,4], [1,0], [0,0], [0,1], [0,2], [0,3], [0,4]]
 letter21 = [[2,1], [2,2], [2,3], [2,4], [1,0], [0,1], [0,2], [0,3], [0,4]]
